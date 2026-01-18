@@ -381,45 +381,51 @@ import spidev
 import RPi.GPIO as GPIO
 import time
 
-# ---- Concept: choose how we name pins ----
-GPIO.setmode(GPIO.BCM)
+# Set the pin numbering mode to BOARD for physical pin numbering
+GPIO.setmode(GPIO.BOARD)
 
-# ---- Concept: CS pin for SD card ----
-CS = 8  # GPIO8 = physical pin 24
-GPIO.setup(CS, GPIO.OUT)
+# Use physical pin number 24 for the Chip Select (CS) line
+CS_PIN = 24
+GPIO.setup(CS_PIN, GPIO.OUT)
 
-# ---- Concept: open SPI ----
+# Open the SPI bus
 spi = spidev.SpiDev()
-spi.open(0, 0)
+spi.open(0, 0)  # Bus 0, Device 0
 
+# Set SPI mode and speed
 spi.mode = 0
 spi.max_speed_hz = 400000
-spi.no_cs = True   # we control CS ourselves
+spi.no_cs = True  # We’ll handle CS manually
 
-# ---- STEP 1: CS HIGH, send dummy clocks ----
-GPIO.output(CS, GPIO.HIGH)
+# Step 1: Ensure the SD card is not selected
+GPIO.output(CS_PIN, GPIO.HIGH)
 
-# 80 clock pulses (10 bytes × 8 bits)
+# Send 80 clock pulses (10 bytes of 0xFF)
 spi.xfer2([0xFF] * 10)
 time.sleep(0.01)
 
-# ---- STEP 2: CS LOW, send CMD0 ----
-GPIO.output(CS, GPIO.LOW)
+# Step 2: Select the SD card by pulling CS low
+GPIO.output(CS_PIN, GPIO.LOW)
 
-# CMD0 = [0x40, 0, 0, 0, 0, 0x95]
-spi.xfer2([0x40, 0, 0, 0, 0, 0x95])
+# Send CMD0 to reset the SD card
+# CMD0 = [0x40, 0, 0, 0, 0, 0x95] (0x95 is the CRC for CMD0)
+cmd0 = [0x40, 0, 0, 0, 0, 0x95]
+spi.xfer2(cmd0)
 
-# ---- STEP 3: wait for response ----
+# Step 3: Wait for response from the SD card
 response = 0xFF
 for _ in range(20):
     response = spi.xfer2([0xFF])[0]
     if response != 0xFF:
         break
 
-GPIO.output(CS, GPIO.HIGH)
+# Deselect the SD card by pulling CS high
+GPIO.output(CS_PIN, GPIO.HIGH)
 
+# Print the response from the SD card
 print("Response:", hex(response))
 
+# Clean up
 spi.close()
 GPIO.cleanup()
 ```
