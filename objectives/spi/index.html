@@ -499,6 +499,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#sending-and-receiving-data-over-spi" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sending and Receiving Data over SPI
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -986,7 +997,7 @@ I used :</p>
 <table>
 <thead>
 <tr>
-<th>Raspiberry Pi</th>
+<th>Raspberry Pi</th>
 <th>Pins in the Raspberry Pi</th>
 </tr>
 </thead>
@@ -1164,10 +1175,10 @@ MOSI/Pin 19 from Raspberry Pi to MOSI pin on the MicroSD module. <br/>
 <img alt="MOSI/Pin 19 from Raspberry Pi to MOSI pin on the MicroSD module." src="../../img/objectives/spi/spi_8.png" />
 <br/>
 SCK(Clock pin)/Pin 23 from Raspberry Pi to SCK pin on the MicroSD module. <br/>
-<img alt="MSCK(Clock pin)/Pin 23 from Raspberry Pi to SCK pin on the MicroSD module." src="../../img/objectives/spi/spi_9.png" />
+<img alt="SCK(Clock pin)/Pin 23 from Raspberry Pi to SCK pin on the MicroSD module." src="../../img/objectives/spi/spi_9.png" />
 <br/>
 CS/SS(Chip Select/Secondary Select pin)/Pin 24 from Raspberry Pi to CS pin on the MicroSD module. <br/>
-<img alt="CS/SS(Chip Select/econdary Select pin)/Pin 24 from Raspberry Pi to CS pin on the MicroSD module." src="../../img/objectives/spi/spi_10.png" />
+<img alt="CS/SS(Chip Select/Secondary Select pin)/Pin 24 from Raspberry Pi to CS pin on the MicroSD module." src="../../img/objectives/spi/spi_10.png" />
 <br/>
 Ground/Pin 6 from Raspberry Pi to GND pin on the MicroSD module. <br/>
 <img alt="Ground/Pin 6 from Raspberry Pi to GND pin on the MicroSD module." src="../../img/objectives/spi/spi_18.png" />
@@ -1218,14 +1229,52 @@ Reboot the Pi. <br/>
 </code></pre></div>
 <img alt="SPI enabled" src="../../img/objectives/spi/spi_17.png" /> <br/></p>
 <h3 id="test">Test<a class="headerlink" href="#test" title="Permanent link">⚓︎</a></h3>
-<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">spidev</span>
+<p>We now test with a python program If the python can talk to the SPI interfaces. <br/>
+For this we first install the module <code>python3-spidev</code>.
+<div class="highlight"><pre><span></span><code>sudo apt update
+sudo apt install python3-spidev
+</code></pre></div>
+We now use the below script to connect to the SPI interface. <br/>
+<code>spi.open(0, 0)</code> is using <code>spi.open(BUS, CHIP_SELECT)</code> <br/>
+The <em>BUS</em> is the combination of one clock wire (CLK), one send wire (MOSI) and one receive wire (MISO) - we just wired them up between Pi and MicroSD module<br/>
+The <em>CHIP_SELECT</em> is the device which is connected to the Pi - in out case the MicroSD module.<br/>
+0 for both of then just means the number, like index 0 - both of them being the first and only ones.<br/></p>
+<p><code>spi.max_speed_hz = 400000</code> 
+Its very important to understand what this means. <br/>
+400,000 Hz means 400,000 clock pulses per second. <br/>
+1 clock pulse = 1 bit transferred <br/>
+So roughly, 400,000 bits per second.<br/>
+"+When you talk over SPI, do NOT toggle the clock faster than 400,000 times per second."</p>
+<div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span>
+<span class="normal">3</span>
+<span class="normal">4</span>
+<span class="normal">5</span>
+<span class="normal">6</span>
+<span class="normal">7</span>
+<span class="normal">8</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">spidev</span>
 
 <span class="n">spi</span> <span class="o">=</span> <span class="n">spidev</span><span class="o">.</span><span class="n">SpiDev</span><span class="p">()</span>
-<span class="n">spi</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>        <span class="c1"># bus 0, CS0</span>
+<span class="n">spi</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>      
 <span class="n">spi</span><span class="o">.</span><span class="n">max_speed_hz</span> <span class="o">=</span> <span class="mi">400000</span>
 <span class="n">spi</span><span class="o">.</span><span class="n">mode</span> <span class="o">=</span> <span class="mi">0</span>
 
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;SPI opened successfully&quot;</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+<h2 id="sending-and-receiving-data-over-spi">Sending and Receiving Data over SPI<a class="headerlink" href="#sending-and-receiving-data-over-spi" title="Permanent link">⚓︎</a></h2>
+<p>At this point, the SPI bus is configured and accessible from Python.<br />
+The next step is to understand how data is transferred over SPI using the <code>xfer2()</code> method.</p>
+<div class="highlight"><pre><span></span><code>import spidev
+
+spi = spidev.SpiDev()
+spi.open(0, 0)
+spi.max_speed_hz = 400000
+spi.mode = 0
+
+response = spi.xfer2([0xFF])
+print(response)
+
+spi.close()
 </code></pre></div>
 
 
