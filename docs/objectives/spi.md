@@ -375,7 +375,7 @@ spi.close()
 ```
 
 
-
+#### CMD0 command
 ```
 import spidev
 import RPi.GPIO as GPIO
@@ -424,6 +424,66 @@ GPIO.output(CS_PIN, GPIO.HIGH)
 
 # Print the response from the SD card
 print("Response:", hex(response))
+
+# Clean up
+spi.close()
+GPIO.cleanup()
+```
+#### CMD8 command
+<br/>
+Let’s focus on the simplest command after CMD0, which is the CMD8 command.<br/>
+What CMD8 Does:<br/>
+Purpose: CMD8 is used to check the voltage range and the card’s version.<br/>
+What it sends: It sends a command that includes a requested voltage range and a pattern that the card should echo back.<br/>
+Expected Response: If the card is modern and supports the requested voltage, it will echo back the pattern correctly, confirming compatibility.<br/>
+The Simplest Program for CMD8:<br/>
+
+```
+import spidev
+import RPi.GPIO as GPIO
+import time
+
+# Set the pin numbering mode to BOARD for physical pin numbering
+GPIO.setmode(GPIO.BOARD)
+
+# Use physical pin number 24 for the Chip Select (CS) line
+CS_PIN = 24
+GPIO.setup(CS_PIN, GPIO.OUT)
+
+# Open the SPI bus
+spi = spidev.SpiDev()
+spi.open(0, 0)  # Bus 0, Device 0
+
+# Set SPI mode and speed
+spi.mode = 0
+spi.max_speed_hz = 400000
+spi.no_cs = True  # We’ll handle CS manually
+
+# Step 1: Ensure the SD card is not selected
+GPIO.output(CS_PIN, GPIO.HIGH)
+
+# Send 80 clock pulses (10 bytes of 0xFF)
+spi.xfer2([0xFF] * 10)
+time.sleep(0.01)
+
+# Step 2: Select the SD card by pulling CS low
+GPIO.output(CS_PIN, GPIO.LOW)
+
+# Send CMD8 to check voltage and card compatibility
+# CMD8 = [0x48, 0x00, 0x00, 0x01, 0xAA]
+cmd8 = [0x48, 0x00, 0x00, 0x01, 0xAA]
+spi.xfer2(cmd8)
+
+# Step 3: Wait for the response from the SD card
+response = []
+for _ in range(8):
+    response.append(spi.xfer2([0xFF])[0])
+
+# Deselect the SD card by pulling CS high
+GPIO.output(CS_PIN, GPIO.HIGH)
+
+# Print the response from the SD card
+print("Response:", response)
 
 # Clean up
 spi.close()
