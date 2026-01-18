@@ -377,121 +377,49 @@ spi.close()
 
 
 ```
-import time
 import spidev
 import RPi.GPIO as GPIO
+import time
 
-# -----------------------------
-# GPIO / SPI constants for Raspberry Pi 2 Model B v1.1
-# -----------------------------
-CS_GPIO = 8  # GPIO8 is CE0 / physical pin 24
+# ---- Concept: choose how we name pins ----
+GPIO.setmode(GPIO.BCM)
 
-SPI_BUS = 0
-SPI_DEVICE = 0  # corresponds to CE0, but we will manually control CS
+# ---- Concept: CS pin for SD card ----
+CS = 8  # GPIO8 = physical pin 24
+GPIO.setup(CS, GPIO.OUT)
 
-# -----------------------------
-# Helper: pretty print hex
-# -----------------------------
-def hx(x: int) -> str:
-    return f"0x{x:02X}"
+# ---- Concept: open SPI ----
+spi = spidev.SpiDev()
+spi.open(0, 0)
 
-# -----------------------------
-# SD Command helper:
-#   - Sends a 6-byte SD command frame over SPI
-#   - Then reads the R1 response (1 byte, where 0x01 is expected for CMD0)
-# -----------------------------
-def sd_send_command(spi: spidev.SpiDev, cmd: int, arg: int, crc: int, response_tries: int = 20) -> int:
-    """
-    cmd: command number (e.g., 0 for CMD0)
-    arg: 32-bit argument (CMD0 uses 0)
-    crc: CRC byte (CMD0 requires 0x95, CMD8 requires 0x87; others often ignore CRC in SPI mode)
-    response_tries: how many bytes to clock out while waiting for a non-0xFF response
-    """
+spi.mode = 0
+spi.max_speed_hz = 400000
+spi.no_cs = True   # we control CS ourselves
 
-    # SD command frame in SPI mode is 6 bytes:
-    # [0] 0x40 | cmd
-    # [1..4] argument (big-endian)
-    # [5] CRC
-    frame = [
-        0x40 | cmd,
-        (arg >> 24) & 0xFF,
-        (arg >> 16) & 0xFF,
-        (arg >> 8) & 0xFF,
-        arg & 0xFF,
-        crc,
-    ]
+# ---- STEP 1: CS HIGH, send dummy clocks ----
+GPIO.output(CS, GPIO.HIGH)
 
-    # Send the command frame (while CS is LOW)
-    spi.xfer2(frame)
+# 80 clock pulses (10 bytes × 8 bits)
+spi.xfer2([0xFF] * 10)
+time.sleep(0.01)
 
-    # Now read the R1 response.
-    # The SD card may return 0xFF for a few bytes while it processes the command.
-    # We keep sending 0xFF just to generate clock pulses so it can reply on MISO.
-    for _ in range(response_tries):
-        r = spi.xfer2([0xFF])[0]
-        if r != 0xFF:
-            return r
+# ---- STEP 2: CS LOW, send CMD0 ----
+GPIO.output(CS, GPIO.LOW)
 
-    # If we never got anything other than 0xFF, treat it as "no response"
-    return 0xFF
+# CMD0 = [0x40, 0, 0, 0, 0, 0x95]
+spi.xfer2([0x40, 0, 0, 0, 0, 0x95])
 
-# -----------------------------
-# MAIN
-# -----------------------------
-def main():
-    print("[*] Setting up GPIO for manual Chip Select (CS)...")
-    GPIO.setmode(GPIO.BCM)
-    GPIO.setup(CS_GPIO, GPIO.OUT, initial=GPIO.HIGH)  # CS HIGH = not selected
+# ---- STEP 3: wait for response ----
+response = 0xFF
+for _ in range(20):
+    response = spi.xfer2([0xFF])[0]
+    if response != 0xFF:
+        break
 
-    print("[*] Opening SPI device...")
-    spi = spidev.SpiDev()
-    spi.open(SPI_BUS, SPI_DEVICE)
+GPIO.output(CS, GPIO.HIGH)
 
-    # IMPORTANT: we will manually control CS, so tell spidev not to toggle CE0 for us.
-    spi.no_cs = True
+print("Response:", hex(response))
 
-    # SD cards in SPI mode use:
-    spi.mode = 0
-    spi.max_speed_hz = 400000  # safe, slow init speed
-    spi.bits_per_word = 8
-
-    print("[*] Step 1: Send dummy clocks with CS HIGH (SD card SPI entry requirement)")
-    GPIO.output(CS_GPIO, GPIO.HIGH)
-
-    # SD spec wants at least 74 clock cycles with CS high and MOSI high.
-    # Sending 10 bytes of 0xFF gives 80 clock cycles (10 * 8).
-    spi.xfer2([0xFF] * 10)
-    time.sleep(0.01)
-
-    print("[*] Step 2: Send CMD0 with CS LOW (reset + enter SPI mode)")
-    GPIO.output(CS_GPIO, GPIO.LOW)
-    time.sleep(0.001)
-
-    # CMD0:
-    # - cmd = 0
-    # - arg = 0
-    # - CRC must be 0x95 for CMD0
-    r1 = sd_send_command(spi, cmd=0, arg=0x00000000, crc=0x95)
-
-    GPIO.output(CS_GPIO, GPIO.HIGH)  # de-select card after command
-    time.sleep(0.01)
-
-    print(f"[*] CMD0 R1 response: {hx(r1)}")
-
-    if r1 == 0x01:
-        print("[+] SUCCESS: SD card entered SPI mode (IDLE state = 0x01).")
-    elif r1 == 0xFF:
-        print("[!] No response (0xFF): card not replying over MISO. Check wiring, CS, power, card seating.")
-    elif r1 == 0x00:
-        print("[!] Response 0x00: card claims it is not idle. This is unusual for CMD0 at init; check timing/mode.")
-    else:
-        print("[!] Unexpected response. Still useful for debugging; share it if you want deeper help.")
-
-    print("[*] Cleaning up...")
-    spi.close()
-    GPIO.cleanup()
-
-if __name__ == "__main__":
-    main()
-
+spi.close()
+GPIO.cleanup()
 ```
