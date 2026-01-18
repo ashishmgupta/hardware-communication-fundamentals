@@ -1,6 +1,6 @@
 # Reference: https://squidfunk.github.io/mkdocs-material/reference/
-site_name: SANS HHC Write-Up
-site_author: Insert Author name
+site_name: Hardware Communication Fundamentals
+site_author: Ashish Gupta
 theme:
   icon:
     # Material for MkDocs bundles several icon sets:
@@ -12,9 +12,10 @@ theme:
     # logo: fontawesome/regular/snowflake
     # logo: fontawesome/solid/sleigh
     # logo: fontawesome/solid/candy-cane
-    logo: fontawesome/solid/tree
+    #logo: fontawesome/solid/tree
+    logo: material/chip
   name: material
-  favicon: img/misc/favicon.ico
+  favicon: material/chip
   features:
     - toc.integrate
     - content.code.copy
@@ -101,7 +102,8 @@ nav:
 - Welcome: 'index.md'
 - Objectives:
   - Section 1:
-    - Objective 1: 'objectives/o1.md'
+    - SPI: 'objectives/spi.md'
+    - I2C: 'objectives/i2c.md'
   - Section 2:
     - Objective 2: 'objectives/o2.md'
     - Objective 3: 'objectives/o3.md'
