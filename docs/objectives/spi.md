@@ -98,7 +98,7 @@ I used :
 ### Raspberry Pi
 One of the most important section in the Pi are the pins. <br/>
 
-| Raspiberry Pi      | Pins in the Raspberry Pi                                             |
+| Raspberry Pi      | Pins in the Raspberry Pi                                             |
 | ---------------------- | ------------------------------------------------------- |
 | ![Raspberry Pi](../img/objectives/spi/spi_0.png) | ![Raspberry Pi](../img/objectives/spi/spi_1.png)                                      |
 
@@ -265,10 +265,10 @@ MOSI/Pin 19 from Raspberry Pi to MOSI pin on the MicroSD module. <br/>
 ![MOSI/Pin 19 from Raspberry Pi to MOSI pin on the MicroSD module.](../img/objectives/spi/spi_8.png)
 <br/>
 SCK(Clock pin)/Pin 23 from Raspberry Pi to SCK pin on the MicroSD module. <br/>
-![MSCK(Clock pin)/Pin 23 from Raspberry Pi to SCK pin on the MicroSD module.](../img/objectives/spi/spi_9.png)
+![SCK(Clock pin)/Pin 23 from Raspberry Pi to SCK pin on the MicroSD module.](../img/objectives/spi/spi_9.png)
 <br/>
 CS/SS(Chip Select/Secondary Select pin)/Pin 24 from Raspberry Pi to CS pin on the MicroSD module. <br/>
-![CS/SS(Chip Select/econdary Select pin)/Pin 24 from Raspberry Pi to CS pin on the MicroSD module.](../img/objectives/spi/spi_10.png)
+![CS/SS(Chip Select/Secondary Select pin)/Pin 24 from Raspberry Pi to CS pin on the MicroSD module.](../img/objectives/spi/spi_10.png)
 <br/>
 Ground/Pin 6 from Raspberry Pi to GND pin on the MicroSD module. <br/>
 ![Ground/Pin 6 from Raspberry Pi to GND pin on the MicroSD module.](../img/objectives/spi/spi_18.png)
@@ -321,3 +321,55 @@ cat /boot/config.txt
 ```
 ![SPI enabled](../img/objectives/spi/spi_17.png) <br/>
 
+### Test
+We now test with a python program If the python can talk to the SPI interfaces. <br/>
+For this we first install the module ```python3-spidev```.
+```
+sudo apt update
+sudo apt install python3-spidev
+```
+We now use the below script to connect to the SPI interface. <br/>
+```spi.open(0, 0)``` is using ```spi.open(BUS, CHIP_SELECT)``` <br/>
+The *BUS* is the combination of one clock wire (CLK), one send wire (MOSI) and one receive wire (MISO) - we just wired them up between Pi and MicroSD module<br/>
+The *CHIP_SELECT* is the device which is connected to the Pi - in out case the MicroSD module.<br/>
+0 for both of then just means the number, like index 0 - both of them being the first and only ones.<br/>
+
+```spi.max_speed_hz = 400000``` 
+Its very important to understand what this means. <br/>
+400,000 Hz means 400,000 clock pulses per second. <br/>
+1 clock pulse = 1 bit transferred <br/>
+So roughly, 400,000 bits per second.<br/>
+"+When you talk over SPI, do NOT toggle the clock faster than 400,000 times per second."
+
+```py linenums="1"
+import spidev
+
+spi = spidev.SpiDev()
+spi.open(0, 0)      
+spi.max_speed_hz = 400000
+spi.mode = 0
+
+print("SPI opened successfully")
+
+```
+
+
+## Sending and Receiving Data over SPI
+
+At this point, the SPI bus is configured and accessible from Python.  
+The next step is to understand how data is transferred over SPI using the ```xfer2()``` method.
+
+```
+import spidev
+
+spi = spidev.SpiDev()
+spi.open(0, 0)
+spi.max_speed_hz = 400000
+spi.mode = 0
+
+response = spi.xfer2([0xFF])
+print(response)
+
+spi.close()
+
+```
