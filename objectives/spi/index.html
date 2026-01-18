@@ -1276,6 +1276,123 @@ print(response)
 
 spi.close()
 </code></pre></div>
+<div class="highlight"><pre><span></span><code>import time
+import spidev
+import RPi.GPIO as GPIO
+
+# -----------------------------
+# GPIO / SPI constants for Raspberry Pi 2 Model B v1.1
+# -----------------------------
+CS_GPIO = 8  # GPIO8 is CE0 / physical pin 24
+
+SPI_BUS = 0
+SPI_DEVICE = 0  # corresponds to CE0, but we will manually control CS
+
+# -----------------------------
+# Helper: pretty print hex
+# -----------------------------
+def hx(x: int) -&gt; str:
+    return f&quot;0x{x:02X}&quot;
+
+# -----------------------------
+# SD Command helper:
+#   - Sends a 6-byte SD command frame over SPI
+#   - Then reads the R1 response (1 byte, where 0x01 is expected for CMD0)
+# -----------------------------
+def sd_send_command(spi: spidev.SpiDev, cmd: int, arg: int, crc: int, response_tries: int = 20) -&gt; int:
+    &quot;&quot;&quot;
+    cmd: command number (e.g., 0 for CMD0)
+    arg: 32-bit argument (CMD0 uses 0)
+    crc: CRC byte (CMD0 requires 0x95, CMD8 requires 0x87; others often ignore CRC in SPI mode)
+    response_tries: how many bytes to clock out while waiting for a non-0xFF response
+    &quot;&quot;&quot;
+
+    # SD command frame in SPI mode is 6 bytes:
+    # [0] 0x40 | cmd
+    # [1..4] argument (big-endian)
+    # [5] CRC
+    frame = [
+        0x40 | cmd,
+        (arg &gt;&gt; 24) &amp; 0xFF,
+        (arg &gt;&gt; 16) &amp; 0xFF,
+        (arg &gt;&gt; 8) &amp; 0xFF,
+        arg &amp; 0xFF,
+        crc,
+    ]
+
+    # Send the command frame (while CS is LOW)
+    spi.xfer2(frame)
+
+    # Now read the R1 response.
+    # The SD card may return 0xFF for a few bytes while it processes the command.
+    # We keep sending 0xFF just to generate clock pulses so it can reply on MISO.
+    for _ in range(response_tries):
+        r = spi.xfer2([0xFF])[0]
+        if r != 0xFF:
+            return r
+
+    # If we never got anything other than 0xFF, treat it as &quot;no response&quot;
+    return 0xFF
+
+# -----------------------------
+# MAIN
+# -----------------------------
+def main():
+    print(&quot;[*] Setting up GPIO for manual Chip Select (CS)...&quot;)
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setup(CS_GPIO, GPIO.OUT, initial=GPIO.HIGH)  # CS HIGH = not selected
+
+    print(&quot;[*] Opening SPI device...&quot;)
+    spi = spidev.SpiDev()
+    spi.open(SPI_BUS, SPI_DEVICE)
+
+    # IMPORTANT: we will manually control CS, so tell spidev not to toggle CE0 for us.
+    spi.no_cs = True
+
+    # SD cards in SPI mode use:
+    spi.mode = 0
+    spi.max_speed_hz = 400000  # safe, slow init speed
+    spi.bits_per_word = 8
+
+    print(&quot;[*] Step 1: Send dummy clocks with CS HIGH (SD card SPI entry requirement)&quot;)
+    GPIO.output(CS_GPIO, GPIO.HIGH)
+
+    # SD spec wants at least 74 clock cycles with CS high and MOSI high.
+    # Sending 10 bytes of 0xFF gives 80 clock cycles (10 * 8).
+    spi.xfer2([0xFF] * 10)
+    time.sleep(0.01)
+
+    print(&quot;[*] Step 2: Send CMD0 with CS LOW (reset + enter SPI mode)&quot;)
+    GPIO.output(CS_GPIO, GPIO.LOW)
+    time.sleep(0.001)
+
+    # CMD0:
+    # - cmd = 0
+    # - arg = 0
+    # - CRC must be 0x95 for CMD0
+    r1 = sd_send_command(spi, cmd=0, arg=0x00000000, crc=0x95)
+
+    GPIO.output(CS_GPIO, GPIO.HIGH)  # de-select card after command
+    time.sleep(0.01)
+
+    print(f&quot;[*] CMD0 R1 response: {hx(r1)}&quot;)
+
+    if r1 == 0x01:
+        print(&quot;[+] SUCCESS: SD card entered SPI mode (IDLE state = 0x01).&quot;)
+    elif r1 == 0xFF:
+        print(&quot;[!] No response (0xFF): card not replying over MISO. Check wiring, CS, power, card seating.&quot;)
+    elif r1 == 0x00:
+        print(&quot;[!] Response 0x00: card claims it is not idle. This is unusual for CMD0 at init; check timing/mode.&quot;)
+    else:
+        print(&quot;[!] Unexpected response. Still useful for debugging; share it if you want deeper help.&quot;)
+
+    print(&quot;[*] Cleaning up...&quot;)
+    spi.close()
+    GPIO.cleanup()
+
+if __name__ == &quot;__main__&quot;:
+    main()
+</code></pre></div>
 
 
 
