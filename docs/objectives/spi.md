@@ -489,3 +489,82 @@ print("Response:", response)
 spi.close()
 GPIO.cleanup()
 ```
+
+#### Simplest ACMD41 loop (BOARD mode, minimal logging)
+```
+import spidev
+import RPi.GPIO as GPIO
+import time
+
+# ---------- GPIO SETUP ----------
+GPIO.setmode(GPIO.BOARD)
+
+CS_PIN = 24  # Physical pin 24 (CE0)
+GPIO.setup(CS_PIN, GPIO.OUT, initial=GPIO.HIGH)
+
+# ---------- SPI SETUP ----------
+spi = spidev.SpiDev()
+spi.open(0, 0)
+
+spi.mode = 0
+spi.max_speed_hz = 400000
+spi.no_cs = True  # we control CS manually
+
+# ---------- HELPER FUNCTIONS ----------
+def cs_low():
+    GPIO.output(CS_PIN, GPIO.LOW)
+
+def cs_high():
+    GPIO.output(CS_PIN, GPIO.HIGH)
+
+def send_cmd(cmd, arg, crc):
+    """
+    Send an SD command and return the R1 response.
+    """
+    packet = [
+        0x40 | cmd,
+        (arg >> 24) & 0xFF,
+        (arg >> 16) & 0xFF,
+        (arg >> 8) & 0xFF,
+        arg & 0xFF,
+        crc
+    ]
+
+    spi.xfer2(packet)
+
+    # Read until we get a real response (not 0xFF)
+    for _ in range(20):
+        r = spi.xfer2([0xFF])[0]
+        if r != 0xFF:
+            return r
+
+    return 0xFF  # timeout
+
+# ---------- ASSUME CMD0 ALREADY DONE ----------
+print("Starting ACMD41 initialization loop...\n")
+
+for attempt in range(1, 51):
+
+    cs_low()
+
+    r1_cmd55 = send_cmd(55, 0x00000000, 0x65)
+    print(f"Attempt {attempt}: CMD55  -> R1 = 0x{r1_cmd55:02X}")
+
+    r1_acmd41 = send_cmd(41, 0x00000000, 0x77)
+    print(f"Attempt {attempt}: ACMD41 -> R1 = 0x{r1_acmd41:02X}")
+
+    cs_high()
+
+    if r1_acmd41 == 0x00:
+        print("\n✅ SD card is READY (initialization complete)")
+        break
+
+    time.sleep(0.1)
+
+else:
+    print("\n❌ SD card did not become ready")
+
+# ---------- CLEANUP ----------
+spi.close()
+GPIO.cleanup()
+```
